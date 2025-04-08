@@ -9,39 +9,37 @@ namespace EsepWebhook;
 
 public class Function
 {
-    
-    /// <summary>
-    /// A simple function that takes a string and does a ToUpper
-    /// </summary>
-    /// <param name="input"></param>
-    /// <param name="context"></param>
-    /// <returns></returns>
     public string FunctionHandler(object input, ILambdaContext context)
     {
         context.Logger.LogInformation($"FunctionHandler received: {input}");
 
         dynamic json = JsonConvert.DeserializeObject<dynamic>(input.ToString());
 
-        // Testing from postman, you can use this code to test the function
-        /*
-        context.Logger.LogInformation($"Body: {json.body}");
-        dynamic body = JsonConvert.DeserializeObject<dynamic>(json.body.ToString());
-        context.Logger.LogInformation($"Issue: {body.issue}");
-        context.Logger.LogInformation($"Html: {body.issue.html_url}");
-        string payload = $"{{'text':'Issue Created: {body.issue.html_url}'}}";
-        */
-        
-        string payload = $"{{'text':'Issue Created: {json.issue.html_url}'}}";
+        string slackUrl = Environment.GetEnvironmentVariable("SLACK_URL");
+        if (string.IsNullOrEmpty(slackUrl))
+        {
+            context.Logger.LogError("SLACK_URL environment variable is missing!");
+            return "Slack URL not configured.";
+        }
+
+        string issueUrl = json?.issue?.html_url;
+        if (string.IsNullOrEmpty(issueUrl))
+        {
+            context.Logger.LogError("Missing issue URL in payload");
+            return "Invalid payload structure.";
+        }
+
+        string payload = $"{{\"text\":\"Issue Created: {issueUrl}\"}}";
 
         var client = new HttpClient();
-        var webRequest = new HttpRequestMessage(HttpMethod.Post, Environment.GetEnvironmentVariable("SLACK_URL"))
+        var request = new HttpRequestMessage(HttpMethod.Post, slackUrl)
         {
             Content = new StringContent(payload, Encoding.UTF8, "application/json")
         };
-    
-        var response = client.Send(webRequest);
-        using var reader = new StreamReader(response.Content.ReadAsStream());
-            
-        return reader.ReadToEnd();
+
+        var response = client.Send(request);
+        var responseContent = response.Content.ReadAsStringAsync().Result;
+
+        return responseContent;
     }
 }
