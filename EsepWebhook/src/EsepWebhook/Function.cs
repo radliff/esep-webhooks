@@ -13,20 +13,31 @@ public class Function
     {
         context.Logger.LogInformation($"FunctionHandler received: {input}");
 
-        dynamic json = JsonConvert.DeserializeObject<dynamic>(input.ToString());
+        // Parse API Gateway wrapper
+        dynamic wrapper = JsonConvert.DeserializeObject<dynamic>(input.ToString());
+
+        string rawBody = wrapper?.body;
+        if (string.IsNullOrEmpty(rawBody))
+        {
+            context.Logger.LogError("Missing body in event payload.");
+            return "Missing body.";
+        }
+
+        // Parse the actual GitHub payload
+        dynamic json = JsonConvert.DeserializeObject<dynamic>(rawBody);
+        string issueUrl = json?.issue?.html_url;
+
+        if (string.IsNullOrEmpty(issueUrl))
+        {
+            context.Logger.LogError("Missing issue URL in payload.");
+            return "Invalid payload structure.";
+        }
 
         string slackUrl = Environment.GetEnvironmentVariable("SLACK_URL");
         if (string.IsNullOrEmpty(slackUrl))
         {
             context.Logger.LogError("SLACK_URL environment variable is missing!");
             return "Slack URL not configured.";
-        }
-
-        string issueUrl = json?.issue?.html_url;
-        if (string.IsNullOrEmpty(issueUrl))
-        {
-            context.Logger.LogError("Missing issue URL in payload");
-            return "Invalid payload structure.";
         }
 
         string payload = $"{{\"text\":\"Issue Created: {issueUrl}\"}}";
